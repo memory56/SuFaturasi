@@ -290,28 +290,33 @@ function setAuthStatus(msg, isErr){
 }
 
 document.getElementById('google-signin-btn').addEventListener('click', () => {
+  console.log('[auth] Giriş butonuna tıklandı, redirect başlatılıyor…');
   setAuthStatus('Google giriş sayfasına yönlendiriliyor…');
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .then(() => auth.signInWithRedirect(provider))
     .catch(err => {
+      console.error('[auth] signInWithRedirect hatası:', err);
       setAuthStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
     });
 });
-document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
+document.getElementById('signout-btn').addEventListener('click', () => {
+  console.log('[auth] Çıkış yapılıyor…');
+  auth.signOut();
+});
 
 // Redirect dönüşünde sonucu/olası hataları yakala (yetkisiz domain, engellenen tarayıcı vb.)
+console.log('[auth] Sayfa yüklendi, getRedirectResult kontrol ediliyor…');
 setAuthStatus('Oturum kontrol ediliyor…');
 auth.getRedirectResult().then(result => {
-  if (result && result.user){
-    setAuthStatus('');
-  } else {
-    setAuthStatus('');
-  }
+  console.log('[auth] getRedirectResult sonucu:', result, 'user:', result && result.user);
+  setAuthStatus('');
 }).catch(err => {
+  console.error('[auth] getRedirectResult hatası:', err);
   setAuthStatus('Giriş hatası: ' + (err && err.message ? err.message : 'bilinmeyen hata') + (err && err.code ? ' (' + err.code + ')' : ''), true);
 });
 
 auth.onAuthStateChanged(user => {
+  console.log('[auth] onAuthStateChanged tetiklendi, user:', user && user.email);
   const overlay = document.getElementById('auth-overlay');
   const userbar = document.getElementById('userbar');
   if (user) {
@@ -322,6 +327,17 @@ auth.onAuthStateChanged(user => {
   } else {
     overlay.style.display = 'flex';
     userbar.style.display = 'none';
+  }
+});
+
+// Bazı tarayıcılar redirect dönüşünde sayfayı "bfcache"den (script'ler yeniden
+// çalışmadan) geri getirebiliyor; bu durumda Firebase'in redirect sonucunu
+// işleyecek kodu hiç çalışmaz. Böyle bir durum tespit edilirse sayfayı zorla
+// yeniden yükleyerek redirect sonucunun düzgün işlenmesini sağlıyoruz.
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    console.log('[auth] Sayfa bfcache üzerinden geri geldi, yeniden yükleniyor…');
+    window.location.reload();
   }
 });
 

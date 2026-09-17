@@ -1,4 +1,4 @@
-const CACHE_NAME = 'su-faturasi-v1';
+const CACHE_NAME = 'su-faturasi-v2';
 const SHELL = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -16,7 +16,15 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Sadece GET ve kendi origin'imizdeki (http/https) istekleri ele al.
+  // Tarayıcı uzantılarının (chrome-extension://) veya farklı origin'lerin
+  // (ör. Google giriş akışı, gapi.js) isteklerine karışma — bunlar servis
+  // worker'ımızın işi değil ve müdahale edilirse gereksiz konsol hatalarına
+  // ve olası girişim çakışmalarına yol açabilir.
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
+
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
   );
