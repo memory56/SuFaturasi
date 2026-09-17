@@ -277,13 +277,35 @@ function defaultParams(){
 }
 
 /* ---------------- Auth ---------------- */
-// Safari / iOS ve standalone (ana ekrana eklenmiş) PWA modunda popup ile giriş
-// güvenilir çalışmadığı için signInWithRedirect kullanılıyor.
+// Ana ekrana eklenmiş (standalone) modda window.open çalışmadığı için orada
+// signInWithRedirect, normal tarayıcı sekmesinde ise (Amerikano'daki gibi) daha
+// güvenilir olan signInWithPopup kullanılıyor. Redirect sırasında hesap seçme
+// ekranında geçen süre, bazı mobil tarayıcılarda sekmenin belleğini boşaltıp
+// oturum bilgisini kaybettirebiliyor — popup bu riski taşımıyor.
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
 document.getElementById('google-signin-btn').addEventListener('click', () => {
-  setStatus('Google giriş sayfasına yönlendiriliyor…');
-  auth.signInWithRedirect(provider).catch(err => {
-    setStatus('Giriş başarısız: ' + err.message, true);
-  });
+  if (isStandalone()){
+    setStatus('Google giriş sayfasına yönlendiriliyor…');
+    auth.signInWithRedirect(provider).catch(err => {
+      setStatus('Giriş başarısız: ' + err.message, true);
+    });
+  } else {
+    setStatus('Google giriş penceresi açılıyor…');
+    auth.signInWithPopup(provider).then(() => {
+      setStatus('');
+    }).catch(err => {
+      if (err && err.code === 'auth/popup-blocked'){
+        setStatus('Açılır pencere engellendi, lütfen bu site için popup izni verin.', true);
+      } else if (err && err.code === 'auth/cancelled-popup-request'){
+        // kullanıcı hızlıca birden fazla kez tıkladı, sessizce yoksay
+      } else {
+        setStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
+      }
+    });
+  }
 });
 document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
 
