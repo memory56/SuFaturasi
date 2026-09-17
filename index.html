@@ -8,16 +8,16 @@
 <!-- PWA / Ana ekrana ekleme -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f172a">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 
 <!-- iOS ana ekran desteği -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Su Faturası">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <!-- Android / diğer -->
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -277,12 +277,20 @@ function defaultParams(){
 }
 
 /* ---------------- Auth ---------------- */
+// Safari / iOS ve standalone (ana ekrana eklenmiş) PWA modunda popup ile giriş
+// güvenilir çalışmadığı için signInWithRedirect kullanılıyor.
 document.getElementById('google-signin-btn').addEventListener('click', () => {
-  auth.signInWithPopup(provider).catch(err => {
+  setStatus('Google giriş sayfasına yönlendiriliyor…');
+  auth.signInWithRedirect(provider).catch(err => {
     setStatus('Giriş başarısız: ' + err.message, true);
   });
 });
 document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
+
+// Redirect dönüşünde olası hataları yakala (yetkisiz domain, engellenen tarayıcı vb.)
+auth.getRedirectResult().catch(err => {
+  if (err && err.code) setStatus('Giriş hatası: ' + err.message, true);
+});
 
 auth.onAuthStateChanged(user => {
   const overlay = document.getElementById('auth-overlay');
@@ -297,6 +305,13 @@ auth.onAuthStateChanged(user => {
     userbar.style.display = 'none';
   }
 });
+
+/* ---------------- PWA: Service Worker ---------------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 
 /* ---------------- Data wiring ---------------- */
 function initData(){
