@@ -19,9 +19,9 @@
 <!-- Android / diğer -->
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database-compat.js"></script>
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --border:#33455e;
@@ -119,6 +119,7 @@
   <h2>💧 Su Faturası Takip</h2>
   <p>Verileriniz Google hesabınızla ilişkilendirilip bulutta saklanır. Devam etmek için giriş yapın.</p>
   <button class="btn" id="google-signin-btn">Google ile Giriş Yap</button>
+  <p id="auth-status-line" style="min-height:16px;font-size:.78rem;color:var(--muted)"></p>
 </div>
 
 <header>
@@ -277,41 +278,37 @@ function defaultParams(){
 }
 
 /* ---------------- Auth ---------------- */
-// Ana ekrana eklenmiş (standalone) modda window.open çalışmadığı için orada
-// signInWithRedirect, normal tarayıcı sekmesinde ise (Amerikano'daki gibi) daha
-// güvenilir olan signInWithPopup kullanılıyor. Redirect sırasında hesap seçme
-// ekranında geçen süre, bazı mobil tarayıcılarda sekmenin belleğini boşaltıp
-// oturum bilgisini kaybettirebiliyor — popup bu riski taşımıyor.
-function isStandalone(){
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+// GitHub Pages üzerinde HTTP başlıkları özelleştirilemediği için (Cross-Origin-
+// Opener-Policy gibi) popup tabanlı girişte tarayıcılar arasında güvenilirlik
+// sorunu yaşanabiliyor. Bu yüzden TÜM cihaz/tarayıcılarda signInWithRedirect
+// kullanılıyor — Firebase ve topluluğun statik hosting için önerdiği yöntem.
+function setAuthStatus(msg, isErr){
+  const el = document.getElementById('auth-status-line');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
 }
 
 document.getElementById('google-signin-btn').addEventListener('click', () => {
-  if (isStandalone()){
-    setStatus('Google giriş sayfasına yönlendiriliyor…');
-    auth.signInWithRedirect(provider).catch(err => {
-      setStatus('Giriş başarısız: ' + err.message, true);
+  setAuthStatus('Google giriş sayfasına yönlendiriliyor…');
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(() => auth.signInWithRedirect(provider))
+    .catch(err => {
+      setAuthStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
     });
-  } else {
-    setStatus('Google giriş penceresi açılıyor…');
-    auth.signInWithPopup(provider).then(() => {
-      setStatus('');
-    }).catch(err => {
-      if (err && err.code === 'auth/popup-blocked'){
-        setStatus('Açılır pencere engellendi, lütfen bu site için popup izni verin.', true);
-      } else if (err && err.code === 'auth/cancelled-popup-request'){
-        // kullanıcı hızlıca birden fazla kez tıkladı, sessizce yoksay
-      } else {
-        setStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
-      }
-    });
-  }
 });
 document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
 
-// Redirect dönüşünde olası hataları yakala (yetkisiz domain, engellenen tarayıcı vb.)
-auth.getRedirectResult().catch(err => {
-  if (err && err.code) setStatus('Giriş hatası: ' + err.message, true);
+// Redirect dönüşünde sonucu/olası hataları yakala (yetkisiz domain, engellenen tarayıcı vb.)
+setAuthStatus('Oturum kontrol ediliyor…');
+auth.getRedirectResult().then(result => {
+  if (result && result.user){
+    setAuthStatus('');
+  } else {
+    setAuthStatus('');
+  }
+}).catch(err => {
+  setAuthStatus('Giriş hatası: ' + (err && err.message ? err.message : 'bilinmeyen hata') + (err && err.code ? ' (' + err.code + ')' : ''), true);
 });
 
 auth.onAuthStateChanged(user => {
