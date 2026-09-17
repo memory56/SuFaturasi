@@ -11,8 +11,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 
 <!-- iOS ana ekran desteği -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- NOT: apple-mobile-web-app-capable bilinçli olarak eklenmedi. Bu meta etiketi
+     iOS'ta simgeyi "standalone" (Safari arayüzü olmadan) açar, ancak o modda
+     Google girişi iOS'un ayrı depolama alanı yüzünden güvenilir çalışmıyor.
+     Etiket olmadan simge normal bir Safari sekmesi olarak açılıyor ve giriş
+     zaten sorunsuz çalıştığımız Safari oturumunu kullanıyor. -->
 <meta name="apple-mobile-web-app-title" content="Su Faturası">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
