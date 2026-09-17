@@ -4,7 +4,7 @@
   "description": "Endeks okumasından su faturası hesaplama ve geçmiş takibi",
   "start_url": "./index.html",
   "scope": "./",
-  "display": "standalone",
+  "display": "browser",
   "orientation": "portrait",
   "background_color": "#0b1220",
   "theme_color": "#0f172a",
