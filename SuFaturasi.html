@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Su Faturası Takip</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --border:#33455e;
+    --text:#e6edf5; --muted:#93a3b8; --accent:#3aa0ff; --accent2:#22c58f;
+    --warn:#f2b84b; --danger:#ef5a6f; --input-bg:#0f1c2e;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:linear-gradient(160deg,#0b1220,#111d33 60%,#0b1220); color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:22px 18px 8px; text-align:center;
+  }
+  header h1{ margin:0; font-size:1.5rem; letter-spacing:.2px; }
+  header p{ margin:6px 0 0; color:var(--muted); font-size:.9rem; }
+
+  .wrap{ max-width:980px; margin:0 auto; padding:10px 14px 60px; }
+
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; margin-bottom:18px; box-shadow:0 6px 24px rgba(0,0,0,.25);
+  }
+  .card h2{ margin:0 0 14px; font-size:1.05rem; display:flex; align-items:center; gap:8px; }
+  .card h2 .badge{ font-size:.7rem; background:var(--panel2); color:var(--muted); padding:2px 8px; border-radius:20px; font-weight:500; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  label{ font-size:.78rem; color:var(--muted); display:block; margin-bottom:4px; }
+  input[type=text], input[type=number], input[type=month]{
+    width:100%; padding:10px 11px; border-radius:10px; border:1px solid var(--border);
+    background:var(--input-bg); color:var(--text); font-size:.95rem; outline:none;
+  }
+  input:focus{ border-color:var(--accent); }
+  .field{ display:flex; flex-direction:column; }
+  .field.readonly input{ color:var(--accent); font-weight:600; background:#0c1626; }
+
+  .btn{
+    appearance:none; border:none; cursor:pointer; border-radius:10px; padding:11px 18px;
+    font-size:.92rem; font-weight:600; color:#04121f; background:var(--accent2);
+    transition:transform .08s ease, filter .15s ease;
+  }
+  .btn:hover{ filter:brightness(1.08); }
+  .btn:active{ transform:scale(.98); }
+  .btn.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--border); }
+  .btn.danger{ background:var(--danger); color:#fff; }
+  .btn.ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .btn-row{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+
+  .result-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-top:14px; }
+  .result-tile{ background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .result-tile .lbl{ font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  .result-tile .val{ font-size:1.05rem; font-weight:700; margin-top:2px; }
+  .result-tile.hi .val{ color:var(--accent); }
+  .result-tile.hi2 .val{ color:var(--accent2); }
+  .result-tile.warn .val{ color:var(--warn); }
+
+  table{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  thead th{
+    position:sticky; top:0; background:var(--panel2); color:var(--muted); font-weight:600;
+    text-align:right; padding:8px 8px; white-space:nowrap; border-bottom:1px solid var(--border);
+  }
+  thead th:first-child, tbody td:first-child{ text-align:left; }
+  tbody td{ padding:7px 8px; text-align:right; border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody tr:hover{ background:rgba(255,255,255,.03); }
+  .table-scroll{ overflow-x:auto; border-radius:10px; }
+  .row-actions{ display:flex; gap:6px; justify-content:flex-end; }
+  .icon-btn{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:.95rem;
+    padding:2px 5px; border-radius:6px;
+  }
+  .icon-btn:hover{ background:var(--panel2); color:var(--text); }
+  .diff-ok{ color:var(--accent2); }
+  .diff-bad{ color:var(--danger); }
+
+  details summary{ cursor:pointer; color:var(--muted); font-size:.85rem; margin-bottom:10px; user-select:none; }
+  details[open] summary{ margin-bottom:14px; }
+
+  #auth-overlay{
+    position:fixed; inset:0; background:rgba(6,10,20,.92); display:flex; align-items:center;
+    justify-content:center; flex-direction:column; gap:16px; z-index:50; text-align:center; padding:20px;
+  }
+  #auth-overlay h2{ margin:0; font-size:1.2rem; }
+  #auth-overlay p{ color:var(--muted); max-width:320px; margin:0; font-size:.85rem; }
+  #status-line{ font-size:.78rem; color:var(--muted); text-align:center; margin-top:-6px; margin-bottom:14px; min-height:16px; }
+  .empty-hint{ color:var(--muted); font-size:.85rem; padding:14px; text-align:center; }
+  .userbar{ display:flex; justify-content:center; align-items:center; gap:10px; margin-top:6px; font-size:.78rem; color:var(--muted); }
+  .userbar button{ font-size:.75rem; }
+</style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <h2>💧 Su Faturası Takip</h2>
+  <p>Verileriniz Google hesabınızla ilişkilendirilip bulutta saklanır. Devam etmek için giriş yapın.</p>
+  <button class="btn" id="google-signin-btn">Google ile Giriş Yap</button>
+</div>
+
+<header>
+  <h1>💧 Su Faturası Takip</h1>
+  <p>Endeks okumasından faturayı hesapla, geçmişi otomatik biriktir</p>
+  <div class="userbar" id="userbar" style="display:none">
+    <span id="user-email"></span> · <button class="icon-btn" id="signout-btn">Çıkış yap</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- YENİ KAYIT -->
+  <div class="card">
+    <h2>Yeni Dönem Ekle <span class="badge" id="live-badge">canlı hesaplanıyor</span></h2>
+    <div class="grid">
+      <div class="field">
+        <label>Dönem</label>
+        <input type="month" id="f-donem">
+      </div>
+      <div class="field">
+        <label>İlk Endeks</label>
+        <input type="number" id="f-ilk" step="1" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>Son Endeks</label>
+        <input type="number" id="f-son" step="1" inputmode="numeric">
+      </div>
+      <div class="field readonly">
+        <label>Tüketim (m³)</label>
+        <input type="text" id="f-tuketim" readonly>
+      </div>
+      <div class="field">
+        <label>Net Birim Fiyat (TL/m³)</label>
+        <input type="number" id="f-birim" step="0.0001" inputmode="decimal">
+      </div>
+    </div>
+
+    <details>
+      <summary>Faturadaki gerçek tutarla karşılaştır (opsiyonel)</summary>
+      <div class="grid">
+        <div class="field">
+          <label>Faturadaki Toplam (TL)</label>
+          <input type="number" id="f-gercek-toplam" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+    </details>
+
+    <div class="result-grid" id="live-result"></div>
+
+    <div class="btn-row">
+      <button class="btn" id="save-btn">Kaydet</button>
+      <button class="btn ghost" id="reset-btn">Temizle</button>
+    </div>
+    <div id="status-line"></div>
+  </div>
+
+  <!-- PARAMETRELER -->
+  <div class="card">
+    <details id="param-details">
+      <summary>⚙️ Tarife Parametreleri (oranlar değiştiyse burayı güncelleyin)</summary>
+      <div class="grid">
+        <div class="field">
+          <label>Su Bedeli KDV oranı (%)</label>
+          <input type="number" id="p-suKdv" step="0.01">
+        </div>
+        <div class="field">
+          <label>Atık Su Bedeli oranı (%)</label>
+          <input type="number" id="p-atikOran" step="0.01">
+        </div>
+        <div class="field">
+          <label>Atık Su KDV oranı (%)</label>
+          <input type="number" id="p-atikKdv" step="0.01">
+        </div>
+        <div class="field">
+          <label>K. Atık Bertaraf Bedeli (TL, sabit)</label>
+          <input type="number" id="p-katikBer" step="0.01">
+        </div>
+        <div class="field">
+          <label>K. Atık Ber. KDV oranı (%)</label>
+          <input type="number" id="p-katikKdv" step="0.01">
+        </div>
+        <div class="field">
+          <label>ÇTV birim bedeli (TL/m³)</label>
+          <input type="number" id="p-ctv" step="0.01">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" id="param-save-btn">Parametreleri Kaydet</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- GEÇMİŞ -->
+  <div class="card">
+    <h2>Fatura Geçmişi</h2>
+    <div class="table-scroll">
+      <table id="history-table">
+        <thead>
+          <tr>
+            <th>Dönem</th>
+            <th>Tüketim</th>
+            <th>Net Birim</th>
+            <th>Su Bedeli</th>
+            <th>Atık Su</th>
+            <th>ÇTV</th>
+            <th>Toplam (hesap)</th>
+            <th>Toplam (fatura)</th>
+            <th>Fark</th>
+            <th>Brüt Birim</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="11" class="empty-hint">Henüz kayıt yok — yukarıdan ilk dönemi ekleyin.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------------- Firebase ---------------- */
+const firebaseApp = firebase.initializeApp({
+  apiKey: "AIzaSyBmH5WsehTsA55yMSWLfpzPjtm-TGXoLAI",
+  authDomain: "amerikano-b037f.firebaseapp.com",
+  databaseURL: "https://amerikano-b037f-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "amerikano-b037f",
+  storageBucket: "amerikano-b037f.firebasestorage.app",
+  messagingSenderId: "579047493957",
+  appId: "1:579047493957:web:53bf80388ad14b268bae2c"
+});
+const auth = firebase.auth(firebaseApp);
+const provider = new firebase.auth.GoogleAuthProvider();
+const db = firebase.database(firebaseApp);
+
+let kayitlarRef = null;
+let paramRef = null;
+let kayitlar = {};   // key -> record
+let params = defaultParams();
+
+function defaultParams(){
+  return {
+    suKdv: 0.01,
+    atikOran: 0.50,
+    atikKdv: 0.10,
+    katikBer: 3.39,
+    katikKdv: 0.20,
+    ctv: 4.00
+  };
+}
+
+/* ---------------- Auth ---------------- */
+document.getElementById('google-signin-btn').addEventListener('click', () => {
+  auth.signInWithPopup(provider).catch(err => {
+    setStatus('Giriş başarısız: ' + err.message, true);
+  });
+});
+document.getElementById('signout-btn').addEventListener('click', () => auth.signOut());
+
+auth.onAuthStateChanged(user => {
+  const overlay = document.getElementById('auth-overlay');
+  const userbar = document.getElementById('userbar');
+  if (user) {
+    overlay.style.display = 'none';
+    userbar.style.display = 'flex';
+    document.getElementById('user-email').textContent = user.email || user.displayName || 'Giriş yapıldı';
+    initData();
+  } else {
+    overlay.style.display = 'flex';
+    userbar.style.display = 'none';
+  }
+});
+
+/* ---------------- Data wiring ---------------- */
+function initData(){
+  kayitlarRef = db.ref('suFaturalari/kayitlar');
+  paramRef = db.ref('suFaturalari/parametreler');
+
+  paramRef.on('value', snap => {
+    const v = snap.val();
+    if (v) { params = Object.assign(defaultParams(), v); }
+    fillParamForm();
+    recalcLive();
+  });
+
+  kayitlarRef.on('value', snap => {
+    kayitlar = snap.val() || {};
+    renderHistory();
+    prefillNextDonem();
+  });
+}
+
+function fillParamForm(){
+  document.getElementById('p-suKdv').value = (params.suKdv*100).toFixed(2);
+  document.getElementById('p-atikOran').value = (params.atikOran*100).toFixed(2);
+  document.getElementById('p-atikKdv').value = (params.atikKdv*100).toFixed(2);
+  document.getElementById('p-katikBer').value = params.katikBer.toFixed(2);
+  document.getElementById('p-katikKdv').value = (params.katikKdv*100).toFixed(2);
+  document.getElementById('p-ctv').value = params.ctv.toFixed(2);
+}
+
+document.getElementById('param-save-btn').addEventListener('click', () => {
+  const newParams = {
+    suKdv: parseFloat(document.getElementById('p-suKdv').value)/100,
+    atikOran: parseFloat(document.getElementById('p-atikOran').value)/100,
+    atikKdv: parseFloat(document.getElementById('p-atikKdv').value)/100,
+    katikBer: parseFloat(document.getElementById('p-katikBer').value),
+    katikKdv: parseFloat(document.getElementById('p-katikKdv').value)/100,
+    ctv: parseFloat(document.getElementById('p-ctv').value)
+  };
+  for (const k in newParams){ if (isNaN(newParams[k])) { setStatus('Parametrelerde geçersiz değer var.', true); return; } }
+  paramRef.set(newParams).then(()=> setStatus('Parametreler kaydedildi.'));
+});
+
+/* ---------------- Calculation ---------------- */
+function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
+
+function hesapla(ilk, son, birim){
+  const tuketim = son - ilk;
+  const suBedeli = tuketim * birim;
+  const suKdv = suBedeli * params.suKdv;
+  const atikSu = suBedeli * params.atikOran;
+  const atikKdv = atikSu * params.atikKdv;
+  const katikBer = params.katikBer;
+  const katikKdv = katikBer * params.katikKdv;
+  const ctv = tuketim * params.ctv;
+  const araToplamRaw = suBedeli + suKdv + atikSu + atikKdv + katikBer + katikKdv + ctv;
+  const araToplam = round2(araToplamRaw);
+  const toplam = Math.ceil(araToplam - 1e-9);
+  const yuvarlama = round2(toplam - araToplam);
+  const brutBirim = tuketim !== 0 ? toplam / tuketim : 0;
+  return { tuketim, suBedeli, suKdv, atikSu, atikKdv, katikBer, katikKdv, ctv, araToplam, yuvarlama, toplam, brutBirim };
+}
+
+function fmt(n, d=2){
+  if (n===null || n===undefined || isNaN(n)) return '—';
+  return n.toLocaleString('tr-TR', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+
+/* ---------------- Live form ---------------- */
+const ilkEl = document.getElementById('f-ilk');
+const sonEl = document.getElementById('f-son');
+const birimEl = document.getElementById('f-birim');
+const tuketimEl = document.getElementById('f-tuketim');
+const gercekEl = document.getElementById('f-gercek-toplam');
+
+[ilkEl, sonEl, birimEl, gercekEl].forEach(el => el.addEventListener('input', recalcLive));
+
+function recalcLive(){
+  const ilk = parseFloat(ilkEl.value);
+  const son = parseFloat(sonEl.value);
+  const birim = parseFloat(birimEl.value);
+  const box = document.getElementById('live-result');
+
+  if (isNaN(ilk) || isNaN(son) || isNaN(birim) || son < ilk){
+    tuketimEl.value = '';
+    box.innerHTML = '<div class="empty-hint" style="grid-column:1/-1">İlk Endeks, Son Endeks ve Net Birim Fiyat girin.</div>';
+    return;
+  }
+  const r = hesapla(ilk, son, birim);
+  tuketimEl.value = r.tuketim + ' m³';
+
+  const gercek = parseFloat(gercekEl.value);
+  let farkHtml = '';
+  if (!isNaN(gercek)){
+    const fark = round2(r.toplam - gercek);
+    farkHtml = `<div class="result-tile ${Math.abs(fark)<0.01?'hi2':'warn'}">
+        <div class="lbl">Fark (hesap−fatura)</div><div class="val">${fmt(fark)} TL</div></div>`;
+  }
+
+  box.innerHTML = `
+    <div class="result-tile"><div class="lbl">Su Bedeli</div><div class="val">${fmt(r.suBedeli)} TL</div></div>
+    <div class="result-tile"><div class="lbl">Atık Su Bedeli</div><div class="val">${fmt(r.atikSu)} TL</div></div>
+    <div class="result-tile"><div class="lbl">ÇTV</div><div class="val">${fmt(r.ctv)} TL</div></div>
+    <div class="result-tile"><div class="lbl">Yuvarlama</div><div class="val">${fmt(r.yuvarlama)} TL</div></div>
+    <div class="result-tile hi"><div class="lbl">TOPLAM</div><div class="val">${fmt(r.toplam)} TL</div></div>
+    <div class="result-tile hi2"><div class="lbl">Brüt Birim (TL/m³)</div><div class="val">${fmt(r.brutBirim,4)}</div></div>
+    ${farkHtml}
+  `;
+}
+
+function prefillNextDonem(){
+  const keys = Object.keys(kayitlar).sort();
+  if (keys.length === 0) return;
+  const last = kayitlar[keys[keys.length-1]];
+  if (!ilkEl.value && last && typeof last.son === 'number'){
+    ilkEl.value = last.son;
+  }
+  if (!document.getElementById('f-donem').value && last && last.donem){
+    const [y,m] = last.donem.split('-').map(Number);
+    const nm = m === 12 ? 1 : m+1;
+    const ny = m === 12 ? y+1 : y;
+    document.getElementById('f-donem').value = `${ny}-${String(nm).padStart(2,'0')}`;
+  }
+  recalcLive();
+}
+
+/* ---------------- Save / reset ---------------- */
+document.getElementById('save-btn').addEventListener('click', () => {
+  const donem = document.getElementById('f-donem').value;
+  const ilk = parseFloat(ilkEl.value);
+  const son = parseFloat(sonEl.value);
+  const birim = parseFloat(birimEl.value);
+  const gercek = parseFloat(gercekEl.value);
+
+  if (!donem){ setStatus('Lütfen dönem (ay/yıl) seçin.', true); return; }
+  if (isNaN(ilk) || isNaN(son) || son < ilk){ setStatus('İlk/Son Endeks geçersiz.', true); return; }
+  if (isNaN(birim) || birim <= 0){ setStatus('Net Birim Fiyat girin.', true); return; }
+
+  const record = { donem, ilk, son, birim };
+  if (!isNaN(gercek)) record.gercekToplam = gercek;
+
+  const key = donem; // one record per Dönem, overwritten if re-entered
+  kayitlarRef.child(key).set(record).then(() => {
+    setStatus('Kaydedildi: ' + donem);
+    document.getElementById('reset-btn').click();
+  }).catch(err => setStatus('Kaydetme hatası: ' + err.message, true));
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  document.getElementById('f-donem').value = '';
+  ilkEl.value = ''; sonEl.value=''; birimEl.value=''; gercekEl.value='';
+  tuketimEl.value = '';
+  document.getElementById('live-result').innerHTML = '';
+  prefillNextDonem();
+});
+
+function setStatus(msg, isErr){
+  const el = document.getElementById('status-line');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+  if (!isErr) setTimeout(()=>{ if (el.textContent===msg) el.textContent=''; }, 3500);
+}
+
+/* ---------------- History table ---------------- */
+function donemLabel(d){
+  if (!d) return '—';
+  const [y,m] = d.split('-');
+  const aylar = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  return `${aylar[parseInt(m,10)-1]} ${y}`;
+}
+
+function renderHistory(){
+  const body = document.getElementById('history-body');
+  const keys = Object.keys(kayitlar).sort();
+  if (keys.length === 0){
+    body.innerHTML = '<tr><td colspan="11" class="empty-hint">Henüz kayıt yok — yukarıdan ilk dönemi ekleyin.</td></tr>';
+    return;
+  }
+  body.innerHTML = keys.map(key => {
+    const rec = kayitlar[key];
+    const r = hesapla(rec.ilk, rec.son, rec.birim);
+    let farkCell = '—';
+    if (rec.gercekToplam !== undefined && rec.gercekToplam !== null){
+      const fark = round2(r.toplam - rec.gercekToplam);
+      farkCell = `<span class="${Math.abs(fark)<0.01?'diff-ok':'diff-bad'}">${fmt(fark)}</span>`;
+    }
+    return `<tr>
+      <td>${donemLabel(rec.donem)}</td>
+      <td>${r.tuketim} m³</td>
+      <td>${fmt(rec.birim,4)}</td>
+      <td>${fmt(r.suBedeli)}</td>
+      <td>${fmt(r.atikSu)}</td>
+      <td>${fmt(r.ctv)}</td>
+      <td><b>${fmt(r.toplam)}</b></td>
+      <td>${rec.gercekToplam!==undefined ? fmt(rec.gercekToplam) : '—'}</td>
+      <td>${farkCell}</td>
+      <td>${fmt(r.brutBirim,4)}</td>
+      <td class="row-actions">
+        <button class="icon-btn" title="Düzenle" onclick="editRecord('${key}')">✏️</button>
+        <button class="icon-btn" title="Sil" onclick="deleteRecord('${key}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function editRecord(key){
+  const rec = kayitlar[key];
+  if (!rec) return;
+  document.getElementById('f-donem').value = rec.donem;
+  ilkEl.value = rec.ilk;
+  sonEl.value = rec.son;
+  birimEl.value = rec.birim;
+  gercekEl.value = rec.gercekToplam !== undefined ? rec.gercekToplam : '';
+  recalcLive();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function deleteRecord(key){
+  if (!confirm('Bu dönem kaydı silinsin mi?')) return;
+  kayitlarRef.child(key).remove().then(()=> setStatus('Silindi.'));
+}
+</script>
+</body>
+</html>
