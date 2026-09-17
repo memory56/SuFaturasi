@@ -278,10 +278,13 @@ function defaultParams(){
 }
 
 /* ---------------- Auth ---------------- */
-// GitHub Pages üzerinde HTTP başlıkları özelleştirilemediği için (Cross-Origin-
-// Opener-Policy gibi) popup tabanlı girişte tarayıcılar arasında güvenilirlik
-// sorunu yaşanabiliyor. Bu yüzden TÜM cihaz/tarayıcılarda signInWithRedirect
-// kullanılıyor — Firebase ve topluluğun statik hosting için önerdiği yöntem.
+// signInWithRedirect, sayfa Google'a tam sayfa gidip geri dönerken Chrome'un
+// depolama bölümleme (storage partitioning) davranışı yüzünden kimlik
+// bilgisini kaybedebiliyor (getRedirectResult hep boş dönüyor). Amerikano
+// uygulamasında sorunsuz çalışan yöntem olan signInWithPopup, sayfa hiç
+// değişmediği için bu sorunu yaşamıyor — bu yüzden normal tarayıcı
+// sekmelerinde popup, sadece popup'ın teknik olarak çalışamadığı ana ekrana
+// eklenmiş (standalone) modda redirect kullanılıyor.
 function setAuthStatus(msg, isErr){
   const el = document.getElementById('auth-status-line');
   if (!el) return;
@@ -289,27 +292,43 @@ function setAuthStatus(msg, isErr){
   el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
 }
 
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
 document.getElementById('google-signin-btn').addEventListener('click', () => {
-  console.log('[auth] Giriş butonuna tıklandı, redirect başlatılıyor…');
-  setAuthStatus('Google giriş sayfasına yönlendiriliyor…');
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => auth.signInWithRedirect(provider))
-    .catch(err => {
-      console.error('[auth] signInWithRedirect hatası:', err);
-      setAuthStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
+    if (isStandalone()){
+      console.log('[auth] Standalone mod, redirect başlatılıyor…');
+      setAuthStatus('Google giriş sayfasına yönlendiriliyor…');
+      return auth.signInWithRedirect(provider);
+    }
+    console.log('[auth] Popup ile giriş başlatılıyor…');
+    setAuthStatus('Google giriş penceresi açılıyor…');
+    return auth.signInWithPopup(provider).then(result => {
+      console.log('[auth] Popup girişi tamamlandı, user:', result && result.user && result.user.email);
+      setAuthStatus('');
     });
+  }).catch(err => {
+    console.error('[auth] Giriş hatası:', err);
+    if (err && err.code === 'auth/popup-blocked'){
+      setAuthStatus('Açılır pencere engellendi, lütfen bu site için popup izni verin.', true);
+    } else if (err && err.code === 'auth/cancelled-popup-request'){
+      // hızlı çoklu tıklama, yoksay
+    } else {
+      setAuthStatus('Giriş başarısız: ' + (err && err.message ? err.message : 'bilinmeyen hata'), true);
+    }
+  });
 });
 document.getElementById('signout-btn').addEventListener('click', () => {
   console.log('[auth] Çıkış yapılıyor…');
   auth.signOut();
 });
 
-// Redirect dönüşünde sonucu/olası hataları yakala (yetkisiz domain, engellenen tarayıcı vb.)
+// Standalone modda redirect dönüşünün sonucunu/olası hatalarını yakala
 console.log('[auth] Sayfa yüklendi, getRedirectResult kontrol ediliyor…');
-setAuthStatus('Oturum kontrol ediliyor…');
 auth.getRedirectResult().then(result => {
   console.log('[auth] getRedirectResult sonucu:', result, 'user:', result && result.user);
-  setAuthStatus('');
 }).catch(err => {
   console.error('[auth] getRedirectResult hatası:', err);
   setAuthStatus('Giriş hatası: ' + (err && err.message ? err.message : 'bilinmeyen hata') + (err && err.code ? ' (' + err.code + ')' : ''), true);
