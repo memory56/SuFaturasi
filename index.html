@@ -114,6 +114,12 @@
   .empty-hint{ color:var(--muted); font-size:.85rem; padding:14px; text-align:center; }
   .userbar{ display:flex; justify-content:center; align-items:center; gap:10px; margin-top:6px; font-size:.78rem; color:var(--muted); }
   .userbar button{ font-size:.75rem; }
+  .endeks-strip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; scroll-snap-type:x proximity; }
+  .endeks-chip{ flex:0 0 auto; scroll-snap-align:start; background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:8px 12px; min-width:118px; }
+  .endeks-chip .d{ font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  .endeks-chip .e{ font-size:1rem; font-weight:700; margin-top:2px; white-space:nowrap; }
+  .endeks-chip .t{ font-size:.75rem; color:var(--accent); margin-top:1px; }
 </style>
 </head>
 <body>
@@ -186,6 +192,12 @@
       <button class="btn ghost" id="reset-btn">Temizle</button>
     </div>
     <div id="status-line"></div>
+  </div>
+
+  <!-- ENDEKS GEÇMİŞİ -->
+  <div class="card">
+    <h2>📟 Aylık Endeksler</h2>
+    <div class="endeks-strip" id="endeks-strip"><div class="empty-hint">Henüz kayıt yok.</div></div>
   </div>
 
   <!-- PARAMETRELER -->
@@ -555,9 +567,23 @@ function donemLabel(d){
   return `${aylar[parseInt(m,10)-1]} ${y}`;
 }
 
+function renderEndeksler(keys){
+  const strip = document.getElementById('endeks-strip');
+  if (keys.length === 0){ strip.innerHTML = '<div class="empty-hint">Henüz kayıt yok.</div>'; return; }
+  strip.innerHTML = keys.map(key => {
+    const rec = kayitlar[key];
+    return `<div class="endeks-chip" title="Düzenlemek için tıklayın" onclick="editRecord('${key}')" style="cursor:pointer">
+      <div class="d">${donemLabel(rec.donem)}</div>
+      <div class="e">${rec.ilk} → ${rec.son}</div>
+      <div class="t">${rec.son - rec.ilk} m³${rec.ds>1?' · '+rec.ds+' dönem':''}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderHistory(){
   const body = document.getElementById('history-body');
   const keys = Object.keys(kayitlar).sort().reverse();
+  renderEndeksler(keys);
   if (keys.length === 0){
     body.innerHTML = '<tr><td colspan="11" class="empty-hint">Henüz kayıt yok — yukarıdan ilk dönemi ekleyin.</td></tr>';
     return;
