@@ -114,6 +114,8 @@
   .empty-hint{ color:var(--muted); font-size:.85rem; padding:14px; text-align:center; }
   .userbar{ display:flex; justify-content:center; align-items:center; gap:10px; margin-top:6px; font-size:.78rem; color:var(--muted); }
   .userbar button{ font-size:.75rem; }
+  .import-note{ background:var(--panel2); border:1px solid var(--accent); border-radius:10px; padding:10px 12px; font-size:.82rem; margin-top:10px; line-height:1.45; }
+  .import-note.warn{ border-color:var(--warn); }
   .endeks-strip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; scroll-snap-type:x proximity; }
   .endeks-chip{ flex:0 0 auto; scroll-snap-align:start; background:var(--panel2); border:1px solid var(--border);
     border-radius:10px; padding:8px 12px; min-width:118px; }
@@ -192,6 +194,7 @@
       <button class="btn ghost" id="reset-btn">Temizle</button>
     </div>
     <div id="status-line"></div>
+    <div id="import-note" class="import-note" style="display:none"></div>
   </div>
 
   <!-- ENDEKS GEÇMİŞİ -->
@@ -405,6 +408,7 @@ function initData(){
   kayitlarRef.on('value', snap => {
     kayitlar = snap.val() || {};
     renderHistory();
+    faturaIceAktar();
     prefillNextDonem();
   });
 }
@@ -521,6 +525,77 @@ function prefillNextDonem(){
   recalcLive();
 }
 
+/* ---------------- SMS / Kestirme ile fatura içe aktarma ----------------
+   Adres örnekleri:
+     ?fatura=<faturadan okunan metin (URL kodlu)>
+     ?donem=2026-10&ilk=676&son=679&su=134.98&toplam=231.11&ds=2
+*/
+function faturaMetniCoz(raw, katikBirim){
+  const t = String(raw || '').normalize('NFC').replace(/ /g,' ').toLocaleUpperCase('tr-TR');
+  const num = s => parseFloat(String(s).replace(/\./g,'').replace(',', '.'));
+  const out = {};
+  let m;
+  if ((m = t.match(/[İI]LK\s*ENDEKS\D{0,20}?(\d+)/))) out.ilk = parseInt(m[1],10);
+  if ((m = t.match(/SON\s*ENDEKS\D{0,20}?(\d+)/))) out.son = parseInt(m[1],10);
+  if ((m = t.match(/T[ÜU]KET[İI]M\D{0,20}?(\d+)/))) out.tuketim = parseInt(m[1],10);
+  if ((m = t.match(/D[ÖO]NEM[İI]\s*(\d{4})\s*-\s*(\d{1,2})/))) out.faturaDonemi = `${m[1]}-${m[2].padStart(2,'0')}`;
+  if ((m = t.match(/SU\s*BEDEL[İI]\s*KDV[^\d]*\d+\)?\s*([\d.]*\d,\d{2})\s*TL/))) out.suKdv = num(m[1]);
+  if ((m = t.match(/K\.?\s*ATIK\s*BER\.?\s*BEDEL[İI]\s+([\d.]*\d,\d{2})\s*TL/))) out.katik = num(m[1]);
+  if ((m = t.match(/(?:^|[^A-ZÇĞİÖŞÜ])TOPLAM\s+([\d.]*\d,\d{2})\s*TL/))) out.toplam = num(m[1]);
+  // Su bedeli: etiket hemen yanındaysa al; değilse KDV(%1) ile tutarlı olan TL tutarını bul
+  if ((m = t.match(/(?<!ATIK\s*)SU\s*BEDEL[İI]\s+([\d.]*\d,\d{2})\s*TL/))) out.su = num(m[1]);
+  if (out.su === undefined && out.suKdv !== undefined){
+    const tutarlar = [...t.matchAll(/([\d.]*\d,\d{2})\s*TL/g)].map(x => num(x[1]));
+    const aday = tutarlar.filter(a => a > out.suKdv * 10 && Math.abs(a*0.01 - out.suKdv) <= 0.006);
+    if (aday.length === 1) out.su = aday[0];
+  }
+  if (out.ilk === undefined && out.son !== undefined && out.tuketim !== undefined) out.ilk = out.son - out.tuketim;
+  if (out.katik !== undefined && katikBirim > 0) out.ds = Math.max(1, Math.round(out.katik / katikBirim));
+  if (out.faturaDonemi){ // uygulamadaki gelenek: fatura döneminin bir önceki ayı
+    let [y, mo] = out.faturaDonemi.split('-').map(Number);
+    mo -= 1; if (mo === 0){ mo = 12; y -= 1; }
+    out.donem = `${y}-${String(mo).padStart(2,'0')}`;
+  }
+  return out;
+}
+
+let iceAktarildi = false;
+function faturaIceAktar(){
+  if (iceAktarildi) return;
+  iceAktarildi = true;
+  const q = new URLSearchParams(location.search);
+  if (!q.has('fatura') && !q.has('ilk') && !q.has('su')) return;
+  let v = {};
+  if (q.has('fatura')) v = faturaMetniCoz(q.get('fatura'), params.katikBer);
+  const n = k => { const x = q.get(k); return x === null || x === '' ? undefined : parseFloat(x.replace(',', '.')); };
+  if (q.get('donem')) v.donem = q.get('donem');
+  ['ilk','son','su','toplam','ds'].forEach(k => { const x = n(k); if (x !== undefined && !isNaN(x)) v[k] = x; });
+
+  if (v.donem) document.getElementById('f-donem').value = v.donem;
+  if (v.ilk !== undefined) ilkEl.value = v.ilk;
+  if (v.son !== undefined) sonEl.value = v.son;
+  if (v.su !== undefined) suBedeliEl.value = v.su;
+  if (v.toplam !== undefined){ gercekEl.value = v.toplam; gercekEl.closest('details').open = true; }
+  dsEl.value = v.ds || 1;
+  recalcLive();
+
+  const eksik = [];
+  if (!v.donem) eksik.push('Dönem');
+  if (v.ilk === undefined) eksik.push('İlk Endeks');
+  if (v.son === undefined) eksik.push('Son Endeks');
+  if (v.su === undefined) eksik.push('Su Bedeli');
+  const note = document.getElementById('import-note');
+  let html = '📩 <b>Fatura içe aktarıldı.</b> Değerleri kontrol edip <b>Kaydet</b>\'e basın.';
+  if (v.faturaDonemi) html += `<br>Faturadaki dönem ${v.faturaDonemi} → ${donemLabel(v.donem)} olarak girildi.`;
+  if (v.ds > 1) html += `<br>Katı atık bedeli ${v.ds} dönem olarak alındı.`;
+  if (v.donem && kayitlar[v.donem]) html += `<br>⚠️ ${donemLabel(v.donem)} zaten kayıtlı; kaydederseniz üzerine yazılır.`;
+  if (eksik.length) html += `<br>⚠️ Okunamayan alanlar: ${eksik.join(', ')} — elle girin.`;
+  note.innerHTML = html;
+  note.className = 'import-note' + (eksik.length ? ' warn' : '');
+  note.style.display = 'block';
+  history.replaceState(null, '', location.pathname);
+}
+
 /* ---------------- Save / reset ---------------- */
 document.getElementById('save-btn').addEventListener('click', () => {
   const donem = document.getElementById('f-donem').value;
@@ -545,6 +620,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
 });
 
 document.getElementById('reset-btn').addEventListener('click', () => {
+  document.getElementById('import-note').style.display = 'none';
   document.getElementById('f-donem').value = '';
   dsEl.value = 1; ilkEl.value = ''; sonEl.value=''; suBedeliEl.value=''; birimEl.value=''; gercekEl.value='';
   tuketimEl.value = '';
