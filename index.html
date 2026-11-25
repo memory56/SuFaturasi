@@ -163,6 +163,10 @@
         <label>Net Birim Fiyat (TL/m³)</label>
         <input type="text" id="f-birim" readonly>
       </div>
+      <div class="field">
+        <label>Dönem Sayısı (K. Atık Bedeli için)</label>
+        <input type="number" id="f-ds" step="1" min="1" value="1" inputmode="numeric">
+      </div>
     </div>
 
     <details>
@@ -418,13 +422,14 @@ document.getElementById('param-save-btn').addEventListener('click', () => {
 /* ---------------- Calculation ---------------- */
 function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
 
-function hesapla(ilk, son, suBedeli){
+function hesapla(ilk, son, suBedeli, ds){
+  ds = (ds && ds > 0) ? ds : 1;
   const tuketim = son - ilk;
   const birim = tuketim !== 0 ? suBedeli / tuketim : 0;
   const suKdv = suBedeli * params.suKdv;
   const atikSu = suBedeli * params.atikOran;
   const atikKdv = atikSu * params.atikKdv;
-  const katikBer = params.katikBer;
+  const katikBer = round2(params.katikBer * ds);
   const katikKdv = katikBer * params.katikKdv;
   const ctv = tuketim * params.ctv;
   const araToplamRaw = suBedeli + suKdv + atikSu + atikKdv + katikBer + katikKdv + ctv;
@@ -447,8 +452,10 @@ const suBedeliEl = document.getElementById('f-subedeli');
 const birimEl = document.getElementById('f-birim');
 const tuketimEl = document.getElementById('f-tuketim');
 const gercekEl = document.getElementById('f-gercek-toplam');
+const dsEl = document.getElementById('f-ds');
+function dsVal(){ const v = parseInt(dsEl.value,10); return v > 0 ? v : 1; }
 
-[ilkEl, sonEl, suBedeliEl, gercekEl].forEach(el => el.addEventListener('input', recalcLive));
+[ilkEl, sonEl, suBedeliEl, gercekEl, dsEl].forEach(el => el.addEventListener('input', recalcLive));
 
 function recalcLive(){
   const ilk = parseFloat(ilkEl.value);
@@ -462,7 +469,7 @@ function recalcLive(){
     box.innerHTML = '<div class="empty-hint" style="grid-column:1/-1">İlk Endeks, Son Endeks ve faturadaki Su Bedeli\'ni girin.</div>';
     return;
   }
-  const r = hesapla(ilk, son, suBedeli);
+  const r = hesapla(ilk, son, suBedeli, dsVal());
   tuketimEl.value = r.tuketim + ' m³';
   birimEl.value = fmt(r.birim, 4) + ' TL/m³';
 
@@ -477,6 +484,7 @@ function recalcLive(){
   box.innerHTML = `
     <div class="result-tile"><div class="lbl">Su Bedeli</div><div class="val">${fmt(r.suBedeli)} TL</div></div>
     <div class="result-tile"><div class="lbl">Atık Su Bedeli</div><div class="val">${fmt(r.atikSu)} TL</div></div>
+    <div class="result-tile"><div class="lbl">K. Atık Bedeli${dsVal()>1?' ('+dsVal()+' dönem)':''}</div><div class="val">${fmt(r.katikBer)} TL</div></div>
     <div class="result-tile"><div class="lbl">ÇTV</div><div class="val">${fmt(r.ctv)} TL</div></div>
     <div class="result-tile"><div class="lbl">Yuvarlama</div><div class="val">${fmt(r.yuvarlama)} TL</div></div>
     <div class="result-tile hi"><div class="lbl">TOPLAM</div><div class="val">${fmt(r.toplam)} TL</div></div>
@@ -515,6 +523,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
 
   const record = { donem, ilk, son, su: suBedeli };
   if (!isNaN(gercek)) record.gercekToplam = gercek;
+  if (dsVal() > 1) record.ds = dsVal();
 
   const key = donem; // one record per Dönem, overwritten if re-entered
   kayitlarRef.child(key).set(record).then(() => {
@@ -525,7 +534,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   document.getElementById('f-donem').value = '';
-  ilkEl.value = ''; sonEl.value=''; suBedeliEl.value=''; birimEl.value=''; gercekEl.value='';
+  dsEl.value = 1; ilkEl.value = ''; sonEl.value=''; suBedeliEl.value=''; birimEl.value=''; gercekEl.value='';
   tuketimEl.value = '';
   document.getElementById('live-result').innerHTML = '';
   prefillNextDonem();
@@ -555,7 +564,7 @@ function renderHistory(){
   }
   body.innerHTML = keys.map(key => {
     const rec = kayitlar[key];
-    const r = hesapla(rec.ilk, rec.son, rec.su);
+    const r = hesapla(rec.ilk, rec.son, rec.su, rec.ds);
     let farkCell = '—';
     if (rec.gercekToplam !== undefined && rec.gercekToplam !== null){
       const fark = round2(r.toplam - rec.gercekToplam);
@@ -563,7 +572,7 @@ function renderHistory(){
     }
     return `<tr>
       <td>${donemLabel(rec.donem)}</td>
-      <td>${r.tuketim} m³</td>
+      <td>${r.tuketim} m³${rec.ds>1?' <small>('+rec.ds+' dönem)</small>':''}</td>
       <td>${fmt(r.birim,4)}</td>
       <td>${fmt(r.suBedeli)}</td>
       <td>${fmt(r.atikSu)}</td>
@@ -588,6 +597,7 @@ function editRecord(key){
   sonEl.value = rec.son;
   suBedeliEl.value = rec.su;
   gercekEl.value = rec.gercekToplam !== undefined ? rec.gercekToplam : '';
+  dsEl.value = rec.ds || 1;
   recalcLive();
   window.scrollTo({top:0, behavior:'smooth'});
 }
