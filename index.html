@@ -560,6 +560,10 @@ function faturaMetniCoz(raw, katikBirim){
 }
 
 let iceAktarildi = false;
+// Safari aynı sayfa açıkken yalnızca #b64= kısmı değişirse sayfayı yeniden yüklemez; bunu yakala
+window.addEventListener('hashchange', () => {
+  if (/b64=/.test(location.hash) && kayitlarRef){ iceAktarildi = false; faturaIceAktar(); window.scrollTo({top:0, behavior:'smooth'}); }
+});
 function faturaIceAktar(){
   if (iceAktarildi) return;
   iceAktarildi = true;
