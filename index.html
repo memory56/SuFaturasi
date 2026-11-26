@@ -564,6 +564,15 @@ function faturaIceAktar(){
   if (iceAktarildi) return;
   iceAktarildi = true;
   const q = new URLSearchParams(location.search);
+  // Kestirme metni Base64 olarak #b64= ile de gönderebilir (Türkçe karakterler bozulmasın diye)
+  const hm = location.hash.match(/b64=([^&]*)/);
+  if (hm){
+    try {
+      const b = atob(decodeURIComponent(hm[1]).replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/'));
+      const bytes = Uint8Array.from(b, c => c.charCodeAt(0));
+      q.set('fatura', new TextDecoder('utf-8').decode(bytes));
+    } catch(e){ q.set('fatura', '(Base64 çözülemedi: ' + e.message + ')'); }
+  }
   if (!q.has('fatura') && !q.has('ilk') && !q.has('su')) return;
   let v = {};
   if (q.has('fatura')) v = faturaMetniCoz(q.get('fatura'), params.katikBer);
