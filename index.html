@@ -590,6 +590,11 @@ function faturaIceAktar(){
   if (v.ds > 1) html += `<br>Katı atık bedeli ${v.ds} dönem olarak alındı.`;
   if (v.donem && kayitlar[v.donem]) html += `<br>⚠️ ${donemLabel(v.donem)} zaten kayıtlı; kaydederseniz üzerine yazılır.`;
   if (eksik.length) html += `<br>⚠️ Okunamayan alanlar: ${eksik.join(', ')} — elle girin.`;
+  if (q.has('fatura')){
+    const ham = q.get('fatura') || '';
+    const esc = ham.slice(0, 3000).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    html += `<details style="margin-top:6px"><summary>Gelen metin (${ham.length} karakter)</summary><pre style="white-space:pre-wrap;font-size:.7rem;max-height:240px;overflow:auto">${esc || '(boş)'}</pre></details>`;
+  }
   note.innerHTML = html;
   note.className = 'import-note' + (eksik.length ? ' warn' : '');
   note.style.display = 'block';
