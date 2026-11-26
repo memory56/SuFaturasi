@@ -1,4 +1,4 @@
-const CACHE_NAME = 'su-faturasi-v8';
+const CACHE_NAME = 'su-faturasi-v9';
 const SHELL = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
